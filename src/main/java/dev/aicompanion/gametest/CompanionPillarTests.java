@@ -10,6 +10,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -17,6 +18,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.List;
 
 /** Real movement, finite materials, interruption and ownership checks for temporary tree supports. */
 @GameTestHolder(AICompanionMod.MOD_ID)
@@ -269,6 +272,67 @@ public final class CompanionPillarTests {
                 helper.assertTrue(!helper.getBlockState(new BlockPos(x, y, z)).is(Blocks.COBBLED_DEEPSLATE), "Deepslate left in the world at " + x + "," + y + "," + z);
             helper.assertTrue(count(companion, Items.COBBLED_DEEPSLATE) == SOIL_SUPPLY, "Deepslate was lost: " + count(companion, Items.COBBLED_DEEPSLATE));
             helper.assertTrue(companion.onGround(), "Work completed while companion was still falling");
+        });
+    }
+
+    /**
+     * A stand raised for a fight, with a drop of that fight at his feet, comes down once the drop is in his bag: the goal's own ask
+     * for the descent ({@link CompanionPillar#requestCleanupAfterFight}) finds the column held for the drop, the column stays while
+     * the drop is there, and with it taken the column comes down and its blocks are back in the bag. A regression pin of that order:
+     * the row is green at the old order too, because a column held for a drop is never held for a fight at the same moment — the drop
+     * hold is taken only while the descent is not recovering and the fight hold is set only while it is — so the guard in
+     * {@link CompanionPillar#requestCleanup(boolean)} is kept for the path where both would meet, not claimed as a behaviour change.
+     */
+    @GameTest(template = "empty", timeoutTicks = 900)
+    public static void aStandHeldForItsDropComesDownOnceTheDropIsTaken(GameTestHelper h) {
+        for (int x = 0; x < 32; x++) for (int z = 0; z < 32; z++) h.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+        CompanionEntity c = h.spawn(AICompanionMod.COMPANION.get(), 16, 1, 16);
+        var owner = h.makeMockServerPlayerInLevel();
+        owner.teleportTo(c.getX() - 3, c.getY(), c.getZ() - 3);
+        c.setOwnerId(owner.getUUID());
+        owner.getPersistentData().putUUID("aicompanion:canonical_companion", c.getUUID());
+        CompanionEvents.getOwnedCompanion(owner);
+        c.setSearchRadius(16);
+        c.setItem(0, new ItemStack(Items.COBBLESTONE, 16));
+        c.setItem(1, new ItemStack(Items.STONE_PICKAXE));
+        int stone = count(c, Items.COBBLESTONE);
+        long begun = h.getTick();
+        boolean[] stood = {false}, claimed = {false};
+        ItemEntity[] drop = {null};
+        h.onEachTick(() -> {
+            if (!stood[0]) {
+                if (c.temporaryPillar().tickUp(2) == CompanionPillar.Outcome.READY) stood[0] = true;
+                return;
+            }
+            if (!claimed[0]) {
+                claimed[0] = true;
+                // The drop of the fight lies on the stand's own top, within his reach: the column standing is the way to it.
+                drop[0] = new ItemEntity(h.getLevel(), c.getX(), c.getY() + .6, c.getZ(), new ItemStack(Items.ROTTEN_FLESH));
+                drop[0].setPickUpDelay(0);
+                h.assertTrue(h.getLevel().addFreshEntity(drop[0]), "The drop of the fight was not added");
+                c.claimDrops(List.of(drop[0]));
+                // The goal that raised the stand asks for the descent while the column is held for that drop.
+                c.temporaryPillar().requestCleanupAfterFight();
+                h.assertTrue(c.temporaryPillar().isHeld() && c.getTemporarySupportCount() == 2,
+                        "The stand was not held for the drop: held " + c.temporaryPillar().isHeld()
+                                + ", supports " + c.getTemporarySupportCount() + ", recovering " + c.isRecoveringSupports()
+                                + ", drop at " + drop[0].blockPosition().toShortString() + ", he at " + c.blockPosition().toShortString());
+                return;
+            }
+            h.assertTrue(c.isAlive(), "Died while the stand waited for its drop");
+            if (drop[0] != null && drop[0].isAlive()) {
+                h.assertTrue(c.getTemporarySupportCount() > 0 && c.temporaryPillar().isHeld(),
+                        "The stand came down before the drop was in his bag: supports " + c.getTemporarySupportCount()
+                                + ", held " + c.temporaryPillar().isHeld() + ", recovering " + c.isRecoveringSupports()
+                                + ", drop at " + drop[0].blockPosition().toShortString() + " onGround " + drop[0].onGround()
+                                + ", he at " + c.blockPosition().toShortString() + ", pending " + c.hasPendingLoot());
+                return;
+            }
+            h.assertTrue(h.getTick() - begun < 850, "The drop is gone but the stand is still there: supports "
+                    + c.getTemporarySupportCount() + ", recovering " + c.isRecoveringSupports() + ", held " + c.temporaryPillar().isHeld()
+                    + ", onGround " + c.onGround() + ", cobblestone " + count(c, Items.COBBLESTONE) + " of " + stone
+                    + ", he at " + c.blockPosition().toShortString());
+            if (c.getTemporarySupportCount() == 0 && !c.isRecoveringSupports() && c.onGround() && count(c, Items.COBBLESTONE) >= stone) h.succeed();
         });
     }
 

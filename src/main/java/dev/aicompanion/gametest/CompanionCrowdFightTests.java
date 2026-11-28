@@ -29,6 +29,12 @@ import java.util.List;
  * pinned in a corner of a cave, three zombies on him, a blow dealt at every swing and still dead). With three or more after him he gets out
  * of their reach as a player does: blocks from his bag under his feet, and he strikes down from the column; the blocks come back to the
  * bag when the fight is over. This grew out of the fight in PR #98 by qMiko318.
+ * <p>
+ * These rows are regression pins for the fight itself: they were green before the fight-hold reorder of the cleanup ask as well, and
+ * none of them puts the two holds together (a column held for a drop is never held for a fight at the same moment — the drop hold is
+ * taken only while the descent is not recovering, and the fight hold is set only while it is). The sequence itself, a stand held for
+ * the drop of its fight coming down once the drop is in the bag, is pinned by
+ * CompanionPillarTests#aStandHeldForItsDropComesDownOnceTheDropIsTaken.
  */
 @GameTestHolder(AICompanionMod.MOD_ID)
 @PrefixGameTestTemplate(false)
