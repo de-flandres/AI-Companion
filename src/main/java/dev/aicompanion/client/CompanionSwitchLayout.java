@@ -8,14 +8,14 @@ package dev.aicompanion.client;
  */
 public final class CompanionSwitchLayout {
     public static final int ROW_WIDTH = 300, ROW_HEIGHT = 20, ROW_STEP = 30, HIGHEST_ROW = 64, NOTE_FROM_BOTTOM = 64, PAGED_STEP = 24;
-    /** The rows the behaviour screen adds: the model entry first, then the gameplay switches, the two distance rows and the entries that open other screens. */
-    public static final int MODEL_ENTRY_ROW = 0, BEHAVIOUR_ROWS = 33;
+    /** The rows the behaviour screen adds: the model entry first, then the gameplay switches, the pickup distance row and the entries that open other screens. */
+    public static final int MODEL_ENTRY_ROW = 0, BEHAVIOUR_ROWS = 32;
     /** The label of that first row: it opens the model screen, and the screen is not loaded where a GameTest runs. */
     public static final String MODEL_ENTRY_LABEL = "Модель и ответы…";
-    /** The row that names the search distance instead of a switch: beside «Строить себе путь», the same distance the settings screen holds. */
-    public static final String SEARCH_RADIUS_LABEL = "Дальность поиска";
-    /** The distances that row turns through: the setting's own 16..128, so 128 is reachable as 32 is. */
-    public static final int[] SEARCH_RADIUS_STEPS = {16, 32, 64, 128};
+    /**
+     * The search distance's own range («Дальность поиска»): the setting is typed into its field on the settings screen, not
+     * turned by a row — a number between these two is the horizon he searches, and the field refuses anything else (NUMIN, #105).
+     */
     public static final int SEARCH_RADIUS_MIN = 16, SEARCH_RADIUS_MAX = dev.aicompanion.entity.CompanionEntity.MAX_SEARCH_RADIUS;
     /** The pickup radius the row beside it turns through: every step of the setting's 4..32, so 32 is reached (the old step of eight skipped 8 and 16 and never came to 32). */
     public static final int PICK_UP_RADIUS_MIN = 4, PICK_UP_RADIUS_MAX = 32, PICK_UP_RADIUS_STEP = 4;
@@ -28,10 +28,17 @@ public final class CompanionSwitchLayout {
         return next > PICK_UP_RADIUS_MAX ? PICK_UP_RADIUS_MIN : next;
     }
 
-    /** The next search distance a press of that row shows: 16, 32, 64, 128, then round to 16. */
-    public static int nextSearchRadius(int current) {
-        for (int step : SEARCH_RADIUS_STEPS) if (step > current) return step;
-        return SEARCH_RADIUS_MIN;
+    /**
+     * The number typed into «Дальность поиска», or -1 when the text is no whole number in the setting's own 16..128: digits
+     * only, nothing typed at all and a number out of the range are refused, and the field says so instead of saving it.
+     */
+    public static int typedSearchRadius(String text) {
+        if (text == null) return -1;
+        String digits = text.trim();
+        if (digits.isEmpty() || digits.length() > 3) return -1;
+        for (int index = 0; index < digits.length(); index++) if (!Character.isDigit(digits.charAt(index))) return -1;
+        int value = Integer.parseInt(digits);
+        return value >= SEARCH_RADIUS_MIN && value <= SEARCH_RADIUS_MAX ? value : -1;
     }
 
     /** The y the rows would start at by the screen's own centring; never above the title and the top of the screen. */

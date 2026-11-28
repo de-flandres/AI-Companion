@@ -115,12 +115,8 @@ final class CompanionBehaviorScreen extends Screen {
             b.setMessage(buildWayLabel()); CompanionPreferences.sync();
         }).bounds(left, top, ROW_WIDTH, ROW_HEIGHT).tooltip(Tooltip.create(Component.literal(
                 "Блок над ним, до которого не дойти: поднимается к нему на своей земле, потом забирает её обратно. Выключено: такой блок он не достаёт."))).build());
-        // The distance the search works in, the same setting as the settings screen's row 0, made reachable where the way is turned on.
-        addRenderableWidget(Button.builder(searchRadiusLabel(), b -> {
-            OpenRouterConfig.SEARCH_RADIUS.set(CompanionSwitchLayout.nextSearchRadius(OpenRouterConfig.SEARCH_RADIUS.get()));
-            OpenRouterConfig.SEARCH_RADIUS.save(); b.setMessage(searchRadiusLabel()); CompanionPreferences.sync();
-        }).bounds(left, top, ROW_WIDTH, ROW_HEIGHT).tooltip(Tooltip.create(Component.literal(
-                "Насколько далеко он ищет руду, дерево, камень и вещи вокруг себя, блоков. Та же дальность, что в настройках."))).build());
+        // The distance the search works in lives on the settings screen's own row, typed there: this screen keeps no second
+        // editor of it, so a number like 40 or 100 is reachable and one setting has one field.
         addRenderableWidget(Button.builder(highGroundLabel(), b -> {
             OpenRouterConfig.HIGH_GROUND.set(!OpenRouterConfig.HIGH_GROUND.get()); OpenRouterConfig.HIGH_GROUND.save();
             b.setMessage(highGroundLabel()); CompanionPreferences.sync();
@@ -225,7 +221,6 @@ final class CompanionBehaviorScreen extends Screen {
     private Component damageNumbersLabel() { return Component.literal("Цифры урона над Олегом: " + (OpenRouterConfig.DAMAGE_NUMBERS.get() ? "вкл." : "выкл.")); }
     private Component pickUpLabel() { return Component.literal("Подбирать лежащее рядом: " + (OpenRouterConfig.PICK_UP_NEARBY.get() ? "вкл." : "выкл.")); }
     private Component pickUpRadiusLabel() { return Component.literal("Радиус подбора: " + OpenRouterConfig.PICK_UP_RADIUS.get() + " блоков"); }
-    private Component searchRadiusLabel() { return Component.literal(CompanionSwitchLayout.SEARCH_RADIUS_LABEL + ": " + OpenRouterConfig.SEARCH_RADIUS.get() + " блоков"); }
     private Component markersLabel() { return Component.literal("Метки на карте: " + (OpenRouterConfig.MARKERS.get() ? "вкл." : "выкл.")); }
     private Component speechLabel() { return Component.literal("Самостоятельные реплики: " + (OpenRouterConfig.AUTONOMOUS_SPEECH.get() ? "вкл." : "выкл.")); }
     private Component chunksLabel() { return Component.literal("Работа вдали от игрока: " + (OpenRouterConfig.CHUNK_LOADING.get() ? "вкл." : "выкл.")); }

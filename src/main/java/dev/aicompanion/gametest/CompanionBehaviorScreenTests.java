@@ -11,9 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The two distance rows of «Поведение», as arithmetic: the pickup radius turns through the whole 4..32 the setting allows and
- * reaches 32 (the old step of eight went 4, 12, 20, 28 and never came to it), and the search distance has its own row beside
- * «Строить себе путь», turning through the setting's 16..128. No client is needed: the geometry and the cycles are pure numbers.
+ * The two distance settings of the screens, as arithmetic: the pickup radius turns through the whole 4..32 the setting allows and
+ * reaches 32 (the old step of eight went 4, 12, 20, 28 and never came to it), and the search distance is a number the player
+ * types into the settings screen's field, taken only as a whole number in the setting's own 16..128 — 40 and 100 included, which
+ * no cycle of 16/32/64/128 could give (NUMIN, #105). No client is needed: the geometry and the parse are pure numbers.
  */
 @GameTestHolder(AICompanionMod.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -35,22 +36,23 @@ public final class CompanionBehaviorScreenTests {
         h.succeed();
     }
 
-    /** The search distance row exists beside «Строить себе путь» and turns through the whole setting, 128 included. */
+    /**
+     * The search distance is typed: every whole number in 16..128 is taken as itself — 40 and 100, the numbers a cycle of
+     * 16/32/64/128 never gave — and nothing else is: empty, spaces, letters, a decimal point, a number under or over the range.
+     */
     @GameTest(template = "empty")
-    public static void theBehaviourScreenHasTheSearchRadiusRow(GameTestHelper h) {
-        // The row is proved by its label and its cycle, not by a count: a row added to the screen is no broken test.
-        h.assertTrue(CompanionSwitchLayout.SEARCH_RADIUS_LABEL.equals("Дальность поиска"),
-                "The search row's label: " + CompanionSwitchLayout.SEARCH_RADIUS_LABEL);
+    public static void theSearchRadiusIsTypedAsAWholeNumberInItsOwnRange(GameTestHelper h) {
         h.assertTrue(CompanionSwitchLayout.SEARCH_RADIUS_MIN == 16 && CompanionSwitchLayout.SEARCH_RADIUS_MAX == 128,
-                "The search row does not cover the setting's 16..128");
-        List<Integer> seen = new ArrayList<>();
-        int value = CompanionSwitchLayout.nextSearchRadius(CompanionSwitchLayout.SEARCH_RADIUS_MIN);
-        while (!seen.contains(value)) {
-            seen.add(value);
-            value = CompanionSwitchLayout.nextSearchRadius(value);
-        }
-        h.assertTrue(seen.equals(List.of(32, 64, 128, 16)),
-                "The search row does not turn through 32, 64, 128 and back: " + seen);
+                "The setting's own range is not 16..128");
+        for (int radius = CompanionSwitchLayout.SEARCH_RADIUS_MIN; radius <= CompanionSwitchLayout.SEARCH_RADIUS_MAX; radius++)
+            h.assertTrue(CompanionSwitchLayout.typedSearchRadius(Integer.toString(radius)) == radius,
+                    "The typed number " + radius + " is refused or read as another");
+        h.assertTrue(CompanionSwitchLayout.typedSearchRadius("40") == 40, "40, typed, is not taken as 40");
+        h.assertTrue(CompanionSwitchLayout.typedSearchRadius("100") == 100, "100, typed, is not taken as 100");
+        h.assertTrue(CompanionSwitchLayout.typedSearchRadius(" 64 ") == 64, "A typed number with spaces around it is refused");
+        for (String refused : List.of("", "   ", "15", "129", "0", "-32", "abc", "64.0", "4 0", "1e2", "1000"))
+            h.assertTrue(CompanionSwitchLayout.typedSearchRadius(refused) < 0,
+                    "«" + refused + "» is taken as " + CompanionSwitchLayout.typedSearchRadius(refused) + ", not refused");
         h.succeed();
     }
 }

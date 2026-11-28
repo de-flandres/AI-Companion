@@ -27,6 +27,8 @@ import java.util.List;
  */
 public final class CompanionSettingsScreen extends Screen {
     private static final int MAX_RADIUS = dev.aicompanion.entity.CompanionEntity.MAX_SEARCH_RADIUS;
+    /** The colour of a field that holds no whole number in its range: the setting is not saved while it is red. */
+    private static final int INVALID = 0xFF5555;
     private static final String[] LABELS = {"Имя компаньона", "Ключ API", "Модель", "Ключ голосового сервиса",
             "ID голоса", "Характер компаньона"};
     private final Screen parent;
@@ -97,12 +99,15 @@ public final class CompanionSettingsScreen extends Screen {
 
         companionName = addRowField(0, left, fieldWidth / 2 - 8, "Имя компаньона", OpenRouterConfig.COMPANION_NAME.get(), false);
         companionName.setMaxLength(24);
-        // Read only: the one editor of the search distance is the row of «Поведение», beside «Строить себе путь», whose
-        // reach it is; here it is shown as the setting the rest of the screen works with, never typed a second time.
-        searchRadius = addRowField(0, left + fieldWidth / 2 + 8, fieldWidth / 2 - 8, "Дальность поиска",
+        // The one editor of the search distance: a typed number in the setting's own 16..128 (NUMIN, #105). A number like 40 or
+        // 100 is reachable here, which a row turning through 16/32/64/128 could not give; an empty or out-of-range field is not
+        // saved and is shown red until it is right.
+        searchRadius = addRowField(0, left + fieldWidth / 2 + 8, fieldWidth / 2 - 8, "Дальность поиска (16–128)",
                 Integer.toString(OpenRouterConfig.SEARCH_RADIUS.get()), false);
-        searchRadius.setEditable(false);
-        searchRadius.setTooltip(Tooltip.create(Component.literal("Меняется на экране «Поведение», рядом со «Строить себе путь».")));
+        searchRadius.setMaxLength(3);
+        searchRadius.setTooltip(Tooltip.create(Component.literal("Введи число от 16 до 128: сколько блоков вокруг он видит и ищет.")));
+        searchRadius.setResponder(text -> searchRadius.setTextColor(
+                CompanionSwitchLayout.typedSearchRadius(text) < 0 ? INVALID : 0xE0E0E0));
         openRouterKey = addRowField(1, left, fieldWidth - 70, "Ключ API", OpenRouterConfig.API_KEY.get(), true);
         openRouterKey.setHint(Component.literal("OpenRouter или https-сервер; локальному не нужен").withStyle(ChatFormatting.GRAY));
         addRowToggle(1, left + fieldWidth - 66, true);
@@ -208,8 +213,18 @@ public final class CompanionSettingsScreen extends Screen {
     }
 
     private void saveAndClose() {
+        // The search distance is the one field that may refuse: no whole number in 16..128 is not saved, the field stays red,
+        // and the screen waits for the player to fix it instead of closing on a value nobody typed (NUMIN, #105).
+        int radius = CompanionSwitchLayout.typedSearchRadius(searchRadius.getValue());
+        if (radius < 0) {
+            searchRadius.setTextColor(INVALID);
+            setFocused(searchRadius);
+            return;
+        }
         OpenRouterConfig.COMPANION_NAME.set(CompanionIdentity.cleanName(companionName.getValue()));
         OpenRouterConfig.COMPANION_NAME.save();
+        OpenRouterConfig.SEARCH_RADIUS.set(radius);
+        OpenRouterConfig.SEARCH_RADIUS.save();
         CompanionPreferences.sync();
         OpenRouterConfig.API_KEY.set(openRouterKey.getValue().trim());
         OpenRouterConfig.API_KEY.save();
