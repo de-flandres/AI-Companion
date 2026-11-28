@@ -152,8 +152,8 @@ public final class CompanionWayOwnerDistanceTests {
             String line = lines.stream().filter(entry -> entry.contains("\"item\":\"minecraft:obsidian\"")
                     && entry.contains("\"chosen\":\"")).findFirst().orElse(null);
             h.assertTrue(line != null, "No way_search line naming the chosen obsidian: " + lines);
-            h.assertTrue(line.contains("\"radius\":32") && line.contains("\"depth\":64"), "The box is not named: " + line);
-            h.assertTrue(line.contains("коробка 32 вбок, 64 вверх и 64 вниз (урезана моим поиском 32)"), "The line does not say the box in words: " + line);
+            h.assertTrue(line.contains("\"radius\":32") && line.contains("\"depth\":32"), "The box is not named: " + line);
+            h.assertTrue(line.contains("коробка 32 вбок, 32 вверх и 32 вниз"), "The line does not say the box in words: " + line);
             h.assertTrue(line.contains("+10 вверх/15.0 вбок"), "The line does not say how far up and across the block is: " + line);
             h.assertTrue(line.contains("ближайшие:") && line.contains("выбран "), "The line does not name the nearest and the choice: " + line);
             h.assertTrue(line.contains("\"shape\":\"column\"") && line.contains("\"id\":\"minecraft:obsidian\""), "The choice is not named: " + line);
@@ -163,15 +163,17 @@ public final class CompanionWayOwnerDistanceTests {
     }
 
     /**
-     * A pumpkin thirty-three above, past the way's height: seen by the search, no way reaches it. The refusal names the distance
-     * — «33 блок вверх» — and the line of the search says why: never only «Рядом не вижу».
+     * A pumpkin thirty-three above: inside the search box the player set (forty) and seen, but no way reaches it — the floor is
+     * stone, so no soil is dug for a column, and twenty-four blocks of dirt are short of the thirty-three steps. The refusal names
+     * the distance — «33 блок вверх» — and the line of the search says why: never only «Рядом не вижу».
      */
     @GameTest(template = "way_wide", timeoutTicks = 400)
     public static void aSeenButUnreachableBlockIsRefusedWithItsDistance(GameTestHelper h) {
-        flat(h, Blocks.GRASS_BLOCK);
+        flat(h, Blocks.STONE);
         BlockPos target = new BlockPos(HOME_X, FEET + 33, HOME_Z);
         h.setBlock(target, Blocks.PUMPKIN);
         CompanionEntity c = spawn(h);
+        c.setSearchRadius(40);
         c.setItem(1, new ItemStack(Items.DIRT, 24));
         var plan = c.obtainPlan("minecraft:pumpkin", 1);
         h.assertTrue(plan.refused(), "The pumpkin thirty-three above is not refused: " + plan);
@@ -195,10 +197,11 @@ public final class CompanionWayOwnerDistanceTests {
      */
     @GameTest(template = "way_wide", timeoutTicks = 400)
     public static void aChainFallbackRefusalNamesTheBlockNotTheOre(GameTestHelper h) {
-        flat(h, Blocks.GRASS_BLOCK);
+        flat(h, Blocks.STONE);
         BlockPos target = new BlockPos(HOME_X, FEET + 33, HOME_Z);
         h.setBlock(target, Blocks.GOLD_BLOCK);
         CompanionEntity c = spawn(h);
+        c.setSearchRadius(40);
         c.setItem(0, new ItemStack(Items.DIAMOND_PICKAXE));
         c.setItem(1, new ItemStack(Items.DIRT, 24));
         var plan = c.obtainPlan("minecraft:gold_block", 1);

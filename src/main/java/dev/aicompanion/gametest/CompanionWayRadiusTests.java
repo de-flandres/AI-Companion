@@ -22,10 +22,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
- * The owner's own numbers (24.11): the search box across is sixty-four, a cylinder measured flat, and the way's reach — a column
- * of thirty-two steps, a foot of the column up to sixty-four blocks away — matches it. His own smaller setting cuts the box and
- * the line says so; the setting and the way's switch are kept in the save across a reload, and the switch off refuses with its
- * reason in the line, never a silent «С этим пока не справился».
+ * The owner's own numbers (28.11): the search box is the player's own search distance («Дальность поиска»), across and above
+ * and below, capped at 128 — what he sees is the horizon he set, so a block seventy or a hundred across is in a hundred box
+ * and the way reaches it, where a box of sixty-four refused it as «за коробкой 64 вбок». The setting and the way's switch are
+ * kept in the save across a reload, and the switch off refuses with its reason in the line, never a silent «С этим пока не
+ * справился».
  */
 @GameTestHolder(AICompanionMod.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -73,22 +74,105 @@ public final class CompanionWayRadiusTests {
         h.succeed();
     }
 
-    /** His own smaller setting cuts the box, and the line says so — never a silent shrink back to thirty-two. */
+    /** His own smaller setting is the box, and the line says so: sixteen across and sixteen up and down, never sixty-four. */
     @GameTest(template = "way_wide", timeoutTicks = 4000)
-    public static void hisOwnSmallerRadiusCutsTheBoxAndSaysSo(GameTestHelper h) {
+    public static void hisOwnSmallerRadiusIsTheBoxAndSaysSo(GameTestHelper h) {
         flat(h);
         CompanionEntity c = spawn(h);
         c.setSearchRadius(16);
-        h.setBlock(new BlockPos(HOME + 20, FEET + 4, HOME), Blocks.PUMPKIN);
+        // One block past the horizon: the box holds none of it, and the line names it as seen outside, not as absent.
+        h.setBlock(new BlockPos(HOME + 17, FEET + 4, HOME), Blocks.PUMPKIN);
         c.obtainAvailable("minecraft:pumpkin");
         List<String> lines = journal(c, "way_search").stream().filter(line -> line.contains("\"item\":\"minecraft:pumpkin\"")).toList();
         String line = lines.stream().filter(entry -> entry.contains("\"candidates\":")).findFirst().orElse(null);
         h.assertTrue(line != null, "No search line for the pumpkin 20 across with a sixteen box: " + lines);
-        h.assertTrue(line.contains("\"radius\":16") && line.contains("\"depth\":64"), "The box is not cut to sixteen across: " + line);
-        h.assertTrue(line.contains("коробка 16 вбок, 64 вверх и 64 вниз (урезана моим поиском 16)"), "The cut is not said in words: " + line);
+        h.assertTrue(line.contains("\"radius\":16") && line.contains("\"depth\":16"), "The box is not sixteen across and up: " + line);
+        h.assertTrue(line.contains("коробка 16 вбок, 16 вверх и 16 вниз"), "The box is not said in words: " + line);
         h.assertTrue(line.contains("блоков не нашёл"), "The pumpkin 20 across was found in a sixteen box: " + line);
         String outside = lines.stream().filter(entry -> entry.contains("\"outside\":")).findFirst().orElse(null);
-        h.assertTrue(outside != null && outside.contains("за коробкой 16 вбок"), "The block just outside the cut box is not said: " + lines);
+        h.assertTrue(outside != null && outside.contains("за коробкой 16 вбок"), "The block just outside the box is not said: " + lines);
+        h.succeed();
+    }
+
+    /**
+     * The box is as deep as it is wide: in a sixteen box a pumpkin twenty above is not seen at all — a box of sixteen across
+     * with sixty-four up was no horizon the player set (28.11).
+     */
+    @GameTest(template = "way_wide", timeoutTicks = 4000)
+    public static void aBlockTwentyUpIsNotInASixteenBox(GameTestHelper h) {
+        flat(h);
+        CompanionEntity c = spawn(h);
+        c.setSearchRadius(16);
+        h.setBlock(new BlockPos(HOME, FEET + 20, HOME), Blocks.PUMPKIN);
+        var seen = c.obtainAvailable("minecraft:pumpkin");
+        h.assertTrue(!seen.some(), "A pumpkin 20 up is in a box sixteen up: " + seen);
+        List<String> lines = journal(c, "way_search").stream().filter(line -> line.contains("\"item\":\"minecraft:pumpkin\"")).toList();
+        String line = lines.stream().filter(entry -> entry.contains("\"candidates\":")).findFirst().orElse(null);
+        h.assertTrue(line != null, "No search line for the pumpkin 20 up: " + lines);
+        h.assertTrue(line.contains("\"depth\":16") && line.contains("искал в радиусе 16, ничего"), "The depth is not the setting: " + line);
+        h.succeed();
+    }
+
+    /** A pumpkin seventy across is in the box when the search is set to a hundred, and the way walks to it and takes it. */
+    @GameTest(template = "way_wide", timeoutTicks = 8000)
+    public static void aSeventyAcrossIsInTheBoxWhenTheSearchIsSetToAHundred(GameTestHelper h) {
+        flat(h);
+        CompanionEntity c = spawnAt(h, HOME - 50, HOME);
+        c.setSearchRadius(100);
+        c.setItem(0, new ItemStack(Items.DIAMOND_PICKAXE));
+        c.setItem(1, new ItemStack(Items.DIRT, 16));
+        BlockPos target = new BlockPos(HOME - 50 + 70, FEET, HOME);
+        h.setBlock(target, Blocks.PUMPKIN);
+        var seen = c.obtainAvailable("minecraft:pumpkin");
+        h.assertTrue(seen.some(), "A pumpkin 70 across is not in a hundred box: " + seen);
+        String line = chosen(c, "minecraft:pumpkin");
+        h.assertTrue(line != null, "No way_search line naming the chosen pumpkin: " + journal(c, "way_search"));
+        h.assertTrue(line.contains("\"radius\":100") && line.contains("\"depth\":100"), "The box is not a hundred: " + line);
+        h.assertTrue(line.contains("коробка 100 вбок, 100 вверх и 100 вниз"), "The line does not say the box in words: " + line);
+        h.assertTrue(line.contains("70.0 вбок"), "The line does not say how far across the pumpkin is: " + line);
+        h.assertTrue(line.contains("\"shape\":\"walk\""), "The pumpkin 70 across is seen but no way reaches it: " + line);
+        var future = run(h, c, "[{\"action\":\"obtain_item\",\"item\":\"minecraft:pumpkin\",\"count\":1}]");
+        h.succeedWhen(() -> {
+            h.assertTrue(future.isDone() && !future.isCompletedExceptionally(), "Still running: " + c.getLastTaskResult());
+            h.assertTrue(count(c, Items.PUMPKIN) >= 1, "The pumpkin 70 across is not in the bag: " + future.join().report());
+            h.assertBlockPresent(Blocks.AIR, target);
+        });
+    }
+
+    /** The box is measured: a pumpkin exactly a hundred across is in it — the way's own answer names it at 100.0 across. */
+    @GameTest(template = "way_wide", timeoutTicks = 4000)
+    public static void aPumpkinExactlyAHundredAcrossIsInAHundredBox(GameTestHelper h) {
+        flat(h);
+        CompanionEntity c = spawnAt(h, HOME - 60, HOME);
+        c.setSearchRadius(100);
+        c.setItem(1, new ItemStack(Items.DIRT, 16));
+        BlockPos target = new BlockPos(HOME - 60 + 100, FEET, HOME);
+        h.setBlock(target, Blocks.PUMPKIN);
+        var seen = c.obtainAvailable("minecraft:pumpkin");
+        h.assertTrue(seen.some(), "A pumpkin exactly 100 across is not in a hundred box: " + seen);
+        String line = chosen(c, "minecraft:pumpkin");
+        h.assertTrue(line != null, "No way_search line naming the chosen pumpkin: " + journal(c, "way_search"));
+        h.assertTrue(line.contains("\"radius\":100") && line.contains("\"depth\":100") && line.contains("\"candidates\":1"),
+                "The box is not a hundred or the pumpkin is not the one seen: " + line);
+        h.assertTrue(line.contains("100.0 вбок"), "The chosen pumpkin is not measured at 100.0 across: " + line);
+        h.succeed();
+    }
+
+    /** One block past the hundred box: the line says the pumpkin exists just outside it, not that nothing is there. */
+    @GameTest(template = "way_wide", timeoutTicks = 4000)
+    public static void aBlockJustOutsideTheHundredBoxIsSaidOutside(GameTestHelper h) {
+        flat(h);
+        CompanionEntity c = spawnAt(h, HOME - 60, HOME);
+        c.setSearchRadius(100);
+        BlockPos far = new BlockPos(HOME - 60 + 101, FEET, HOME);
+        h.setBlock(far, Blocks.PUMPKIN);
+        var seen = c.obtainAvailable("minecraft:pumpkin");
+        h.assertTrue(!seen.some(), "A pumpkin 101 across is in a hundred box: " + seen);
+        List<String> lines = journal(c, "way_search").stream().filter(line -> line.contains("\"item\":\"minecraft:pumpkin\"")).toList();
+        String outside = lines.stream().filter(line -> line.contains("\"outside\":")).findFirst().orElse(null);
+        h.assertTrue(outside != null, "No «за коробкой» line for the pumpkin 101 across: " + lines);
+        h.assertTrue(outside.contains("за коробкой 100 вбок есть 1"), "The line does not say the block is just outside: " + outside);
+        h.assertBlockPresent(Blocks.PUMPKIN, far);
         h.succeed();
     }
 
@@ -146,9 +230,14 @@ public final class CompanionWayRadiusTests {
     }
 
     private static CompanionEntity spawn(GameTestHelper h) {
-        CompanionEntity c = h.spawn(AICompanionMod.COMPANION.get(), HOME, FEET, HOME);
+        return spawnAt(h, HOME, HOME);
+    }
+
+    /** A companion with his owner beside him at this cell of the arena: the owner is a mock player and the way is on. */
+    private static CompanionEntity spawnAt(GameTestHelper h, int x, int z) {
+        CompanionEntity c = h.spawn(AICompanionMod.COMPANION.get(), x, FEET, z);
         var owner = h.makeMockServerPlayerInLevel();
-        BlockPos stand = h.absolutePos(new BlockPos(HOME - 2, FEET, HOME));
+        BlockPos stand = h.absolutePos(new BlockPos(x - 2, FEET, z));
         owner.teleportTo(stand.getX() + .5, stand.getY(), stand.getZ() + .5);
         owner.setInvulnerable(true);
         c.setOwnerId(owner.getUUID());

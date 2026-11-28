@@ -48,10 +48,12 @@ import java.util.function.Predicate;
 final class CompanionPicking {
     static final String FULL_BAG = "Сумка забита — некуда класть.";
     /**
-     * How far above and below him a target is looked for: as deep as the one search (CompanionWaySearch) looks, so a block it
-     * promised hanging in the air or lying under him is a block this gather can find (PATH7).
+     * How far above and below him the picking looks for the loose things it takes (a leaf crown, a flower, a cane): its own
+     * short box, sixty-four either way, whatever the horizon of the way's search is set to — the picking's search is not the
+     * way's, and a leaf is never a hundred blocks over his head. A block it promised hanging in the air or lying under him is
+     * still found within it (PATH7).
      */
-    private static final int DEPTH = CompanionWaySearch.DEPTH;
+    private static final int DEPTH = 64;
     /** Ticks the drops are given to be picked up before another try, and then before they are counted lost. */
     private static final int SETTLE = 40;
     /** Walks to one block before it is passed over. */

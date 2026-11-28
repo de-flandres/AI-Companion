@@ -174,23 +174,25 @@ public final class CompanionOre {
         private final Kind kind;
         private final BlockPos origin;
         private final int radius;
+        private final int depth;
         private final int minY;
         private final Deque<CompanionSectionScan.Section> pending = new ArrayDeque<>();
         private final List<BlockPos> found = new ArrayList<>();
 
         public Search(ServerLevel level, BlockPos origin, int radius, Kind kind) {
             this.kind = kind; this.origin = origin.immutable();
-            // The same box the general search uses (CompanionWaySearch): sixty-four across and sixty-four up and down, cut by the
-            // player's own search radius. The old forty-eight across and sixteen above refused ore he could see (the owner, 27.11).
-            this.radius = Math.clamp(Math.min(radius, CompanionWaySearch.RADIUS), 8, CompanionWaySearch.RADIUS);
-            this.minY = Math.max(level.getMinBuildHeight(), origin.getY() - CompanionWaySearch.DEPTH);
-            pending.addAll(CompanionSectionScan.sections(level, this.origin, this.radius, CompanionWaySearch.DEPTH, kind::is));
+            // The same box the general search uses (CompanionWaySearch): the player's own search distance, across and up and
+            // down, capped at the setting's ceiling — what he sees is the horizon he set (the owner, 28.11).
+            this.radius = Math.clamp(radius, 8, CompanionWaySearch.MAX_SPAN);
+            this.depth = this.radius;
+            this.minY = Math.max(level.getMinBuildHeight(), origin.getY() - this.depth);
+            pending.addAll(CompanionSectionScan.sections(level, this.origin, this.radius, this.depth, kind::is));
         }
 
         boolean scan(ServerLevel level) {
             for (int budget = 0; budget < 4 && !pending.isEmpty(); budget++) {
                 CompanionSectionScan.Section next = pending.removeFirst();
-                found.addAll(CompanionSectionScan.cells(level, next, origin, radius, CompanionWaySearch.DEPTH, kind::is));
+                found.addAll(CompanionSectionScan.cells(level, next, origin, radius, depth, kind::is));
             }
             return pending.isEmpty();
         }

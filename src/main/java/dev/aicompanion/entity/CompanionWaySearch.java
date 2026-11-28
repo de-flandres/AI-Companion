@@ -22,8 +22,9 @@ import java.util.function.Predicate;
  * are asked of the one geometry answer (CompanionReach): walked to, taken from under his feet, up a column of his own soil or
  * across a floor he lays — so a block no walk reaches is still his when a column or a bridge is there.
  *
- * The box is the loaded area about him: {@link #RADIUS} blocks across and {@link #DEPTH} above and below, every section of it,
- * not a small box at his feet — a cylinder, so a block far to the side and high up is in it as one at his own level is. One line
+ * The box is the loaded area about him: the player's own search distance («Дальность поиска») across and the same above and
+ * below, every section of it, not a small box at his feet — a cylinder, so a block far to the side and high up is in it as one
+ * at his own level is. What he sees is the horizon he set, and the way reaches as far as it is set (the owner, 28.11). One line
  * per search goes to the game log as well as the journal, and it says where the search died: how many kinds of block give the
  * item, how many cells held one, how many of those the player set down himself and were taken anyway (they ARE the order), and
  * how many were refused and by which rule — his errand's bounds, a portal's frame, lava beside it, anything else. Then the box,
@@ -32,23 +33,27 @@ import java.util.function.Predicate;
  * outside the box is said as its own line: that is the difference between «нет блока» and «блок есть, но не вижу».
  */
 final class CompanionWaySearch {
-    /**
-     * The box searched: this many blocks across — never more than the leash and scan his own work is set to — and this many
-     * above and below him, a cylinder measured flat, not a sphere. Sixty-four is the owner's own world (24.11: thirty-two was
-     * too small for his base); a block farther is another place's, not this order's.
-     */
-    static final int RADIUS = 64, DEPTH = 64;
+    /** The largest box the player's setting allows: the search distance's own ceiling, so the box never exceeds «Дальность поиска». */
+    static final int MAX_SPAN = CompanionEntity.MAX_SEARCH_RADIUS;
+    /** The smallest box the setting may be: its own floor, so a save with a lower number is no box at all. */
+    private static final int MIN_SPAN = 16;
     /** How many of the nearest blocks the way is asked about: a few dozen is every order's, and a scan of all is not. */
     private static final int LOOK = 24;
     /** How many of the nearest are named in the line: enough to read why each was refused, few enough for one line. */
     private static final int SHOWN = 3;
-        /**
-     * The wider box asked only when the box holds nothing: whether a block of the item is there at all, just not seen here —
-     * the widest the player's own setting allows, so a block just past the box is named as seen-outside, not as absent.
+    /**
+     * The least the wider box reaches when the box holds nothing: a block just past a small box is still named as seen-outside,
+     * not as absent — sixty-four was the owner's own world, and a smaller setting does not hide it (24.11).
      */
-    private static final int BEYOND = 64;
+    private static final int BEYOND_MIN = 64;
     /** The rule the search itself keeps a cell by: outside the errand's bounds. */
     private static final String ERRAND = "поручение";
+
+    /**
+     * The box about him, in blocks: the player's own search distance, across and above and below, 16..128 — the horizon he set
+     * is the one the way works in (the owner, 28.11: «сколько он видит» is the setting, not sixty-four).
+     */
+    static int span(CompanionEntity c) { return Math.clamp(c.getSearchRadius(), MIN_SPAN, MAX_SPAN); }
 
     /** A block that gives the item: where it lies, how much one of it gives, and the way to it. */
     record Found(BlockPos pos, int yield, CompanionReach.How how) { }
@@ -140,7 +145,8 @@ final class CompanionWaySearch {
         Map<Block, Integer> gives = giving(level, item);
         Tally tally = new Tally(gives.size());
         if (gives.isEmpty()) return journal(c, level, item, List.<Found>of(), List.<Examined>of(), tally, 0, 0, 0, List.<BlockPos>of());
-        List<BlockPos> found = scan(c, level, gives, mine, Math.min(RADIUS, c.getSearchRadius()), DEPTH, tally);
+        int span = span(c);
+        List<BlockPos> found = scan(c, level, gives, mine, span, span, tally);
         found.sort(Comparator.comparingDouble(pos -> c.distanceToSqr(pos.getCenter())));
         int looked = Math.min(found.size(), LOOK);
         List<Found> reached = new ArrayList<>();
@@ -167,7 +173,8 @@ final class CompanionWaySearch {
     static BlockPos nearestBlock(CompanionEntity c, ServerLevel level, Item item, Mine mine) {
         Map<Block, Integer> gives = giving(level, item);
         if (gives.isEmpty()) return null;
-        List<BlockPos> found = scan(c, level, gives, mine, Math.min(RADIUS, c.getSearchRadius()), DEPTH, new Tally(gives.size()));
+        int span = span(c);
+        List<BlockPos> found = scan(c, level, gives, mine, span, span, new Tally(gives.size()));
         return found.stream().min(Comparator.comparingDouble(pos -> c.distanceToSqr(pos.getCenter()))).orElse(null);
     }
 
@@ -230,14 +237,18 @@ final class CompanionWaySearch {
     /** The nearest blocks of the item outside the box, nearest first, at most the three the line names: the box held none. */
     private static List<BlockPos> beyond(CompanionEntity c, ServerLevel level, Map<Block, Integer> gives, Mine mine) {
         BlockPos center = c.blockPosition();
-        int radius = Math.min(RADIUS, c.getSearchRadius());
-        List<BlockPos> wider = scan(c, level, gives, mine, Math.max(BEYOND, radius + 1), DEPTH, new Tally(gives.size()));
-        wider.removeIf(pos -> {
+        int span = span(c);
+        // The wider box reaches a block just past the horizon, and never less than the owner's sixty-four, up to the setting's
+        // own ceiling: a block outside the box is named as seen-outside, not as absent.
+        int wider = Math.min(MAX_SPAN, Math.max(BEYOND_MIN, span + 1));
+        int widerDepth = Math.max(BEYOND_MIN, span);
+        List<BlockPos> outside = scan(c, level, gives, mine, wider, widerDepth, new Tally(gives.size()));
+        outside.removeIf(pos -> {
             long dx = pos.getX() - center.getX(), dz = pos.getZ() - center.getZ();
-            return dx * dx + dz * dz <= (long) radius * radius && Math.abs(pos.getY() - center.getY()) <= DEPTH;
+            return dx * dx + dz * dz <= (long) span * span && Math.abs(pos.getY() - center.getY()) <= span;
         });
-        wider.sort(Comparator.comparingDouble(pos -> c.distanceToSqr(pos.getCenter())));
-        return wider.size() > SHOWN ? List.copyOf(wider.subList(0, SHOWN)) : List.copyOf(wider);
+        outside.sort(Comparator.comparingDouble(pos -> c.distanceToSqr(pos.getCenter())));
+        return outside.size() > SHOWN ? List.copyOf(outside.subList(0, SHOWN)) : List.copyOf(outside);
     }
 
     /**
@@ -248,13 +259,13 @@ final class CompanionWaySearch {
     private static Result journal(CompanionEntity c, ServerLevel level, Item item, List<Found> reached, List<Examined> examined,
                                   Tally tally, int candidates, int count, int soil, List<BlockPos> beyond) {
         Found nearest = reached.isEmpty() ? null : reached.getFirst();
-        int radius = Math.min(RADIUS, c.getSearchRadius());
-        String why = count > 0 ? "" : candidates == 0 ? "искал в радиусе " + radius + ", ничего"
+        int span = span(c);
+        String why = count > 0 ? "" : candidates == 0 ? "искал в радиусе " + span + ", ничего"
                 : "вижу " + candidates + ", ни к одному нет пути";
         String id = BuiltInRegistries.ITEM.getKey(item).toString();
-        StringBuilder text = new StringBuilder("«").append(id).append("»: коробка ").append(radius).append(" вбок, ")
-                .append(DEPTH).append(" вверх и ").append(DEPTH).append(" вниз")
-                .append(radius < RADIUS ? " (урезана моим поиском " + c.getSearchRadius() + ")" : "").append("; ")
+        StringBuilder text = new StringBuilder("«").append(id).append("»: коробка ").append(span).append(" вбок, ")
+                .append(span).append(" вверх и ").append(span).append(" вниз")
+                .append("; ")
                 .append("видов ").append(tally.kinds).append(", клеток ").append(tally.cells);
         if (tally.cells > 0) text.append(", своих ").append(tally.own).append("; отсеяно: ").append(tally.refused());
         if (candidates == 0) text.append("; блоков не нашёл");
@@ -271,7 +282,7 @@ final class CompanionWaySearch {
         }
         if (nearest == null) text.append("; выбран: нет — ").append(why.isEmpty() ? "блоков этого предмета нет" : why);
         else text.append("; выбран ").append(describe(c, nearest.pos(), nearest.how()));
-        Object[] fields = {"entity", c.getUUID(), "item", id, "radius", radius, "depth", DEPTH,
+        Object[] fields = {"entity", c.getUUID(), "item", id, "radius", span, "depth", span,
                 "kinds", tally.kinds, "cells", tally.cells, "own", tally.own,
                 "refusedErrand", tally.errand, "refusedSite", tally.site, "refusedStone", tally.stone,
                 "refusedPortal", tally.portal, "refusedLava", tally.lava, "refusedOther", tally.other,
@@ -279,17 +290,17 @@ final class CompanionWaySearch {
                 "chosen", nearest == null ? "" : nearest.pos().toShortString(),
                 "id", nearest == null ? "" : BuiltInRegistries.BLOCK.getKey(level.getBlockState(nearest.pos()).getBlock()),
                 "shape", nearest == null ? "none" : nearest.how().shape(), "why", why};
-        String key = id + "|" + radius + "|" + tally.kinds + "|" + tally.cells + "|" + tally.own + "|" + candidates + "|" + count + "|" + soil + "|"
+        String key = id + "|" + span + "|" + tally.kinds + "|" + tally.cells + "|" + tally.own + "|" + candidates + "|" + count + "|" + soil + "|"
                 + (nearest == null ? "" : nearest.pos().toShortString()) + "|" + why;
         sayOnce(c, key, text.toString(), fields);
         if (!beyond.isEmpty()) {
             BlockPos first = beyond.getFirst();
-            String out = "«" + id + "»: за коробкой " + radius + " вбок есть " + beyond.size() + ", ближайший "
+            String out = "«" + id + "»: за коробкой " + span + " вбок есть " + beyond.size() + ", ближайший "
                     + describe(c, first, CompanionReach.how(c, level, first, CompanionReach.WORK_REACH, true, true, c.temporaryPillar.waySpan()))
                     + " — он вне коробки, отсюда не вижу его; подойди ближе или скажи искать дальше";
             // One line per changed answer: the same block outside the same box said once, not once per tick of the search.
-            sayOnce(c, SAID_OUTSIDE, "outside|" + id + "|" + radius + "|" + beyond.size() + "|" + first.toShortString(), out,
-                    "entity", c.getUUID(), "item", id, "radius", radius, "outside", beyond.size(),
+            sayOnce(c, SAID_OUTSIDE, "outside|" + id + "|" + span + "|" + beyond.size() + "|" + first.toShortString(), out,
+                    "entity", c.getUUID(), "item", id, "radius", span, "outside", beyond.size(),
                     "outPos", first.toShortString(), "outRise", first.getY() - c.blockPosition().getY(),
                     "outAcross", Math.round(Math.hypot(first.getX() + .5D - c.getX(), first.getZ() + .5D - c.getZ()) * 10) / 10D);
         }

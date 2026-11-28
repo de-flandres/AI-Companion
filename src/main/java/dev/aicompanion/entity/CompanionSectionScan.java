@@ -10,9 +10,9 @@ import java.util.function.Predicate;
 
 /**
  * The one walk over the loaded sections of a box about him: the way's search and the ore's search look through the same box,
- * {@link CompanionWaySearch#RADIUS} across and {@link CompanionWaySearch#DEPTH} above and below his feet, cut by the player's
- * own search distance. A section's palette says whether any of its cells holds a kind before a cell is read, so a box of
- * sixty-four costs no more than the blocks in it.
+ * the player's own search distance («Дальность поиска») across and above and below, capped at {@link CompanionWaySearch#MAX_SPAN}.
+ * A section's palette says whether any of its cells holds a kind before a cell is read, so a box of a hundred and twenty-eight
+ * costs no more than the blocks in it.
  */
 final class CompanionSectionScan {
     /** A loaded section of the box, by chunk and section index. */
